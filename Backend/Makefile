@@ -196,5 +196,5 @@ quickstart: setup init-db ## Quick start: setup, start services, migrate, and ru
 	@echo "  - Docs: http://localhost:8000/docs"
 	@echo "  - Frontend: http://localhost:8000"
 	@echo ""
-	@echo "$(YELLOW)Run 'make dev' to start the applications$(NC)"
+	@echo "$(YELLOW)Run 'make dev' to start the application$(NC)"
 
