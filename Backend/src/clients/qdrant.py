@@ -50,8 +50,9 @@ class AsyncQdrantClientWrapper:
 
         # Use httpx for HTTPS, requests for HTTP
         if self.use_https:
-            self.client = httpx.AsyncClient(timeout=30.0)
+            self.client = httpx.AsyncClient(base_url=self.base_url, timeout=30.0)
             self.use_requests = False
+            logger.info(f"Created httpx client with base_url: {self.base_url}")
         else:
             self.session = requests.Session()
             self.session.timeout = 30.0
@@ -85,7 +86,7 @@ class AsyncQdrantClientWrapper:
                     )
                 else:
                     response = await self.client.get(
-                        f"{self.base_url}/collections/{COLLECTION_NAME}",
+                        f"/collections/{COLLECTION_NAME}",
                         headers=headers
                     )
                 if response.status_code == 200:
@@ -122,7 +123,7 @@ class AsyncQdrantClientWrapper:
                     )
                 else:
                     response = await self.client.put(
-                        f"{self.base_url}/collections/{COLLECTION_NAME}",
+                        f"/collections/{COLLECTION_NAME}",
                         json=collection_config,
                         headers=headers
                     )
@@ -220,7 +221,7 @@ class AsyncQdrantClientWrapper:
                 )
             else:
                 response = await self.client.put(
-                    f"{self.base_url}/collections/{COLLECTION_NAME}/points",
+                    f"/collections/{COLLECTION_NAME}/points",
                     json=request_data,
                     headers=headers,
                     timeout=10.0
@@ -278,7 +279,7 @@ class AsyncQdrantClientWrapper:
                 )
             else:
                 response = await self.client.post(
-                    f"{self.base_url}/collections/{COLLECTION_NAME}/points/search",
+                    f"/collections/{COLLECTION_NAME}/points/search",
                     json=search_data,
                     headers=headers
                 )
