@@ -33,13 +33,11 @@ class AsyncQdrantClientWrapper:
         host = qdrant_config.host
         port = qdrant_config.port
 
-        # Handle full HTTPS URLs (e.g., from cloud providers)
-        if host.startswith("https://"):
-            self.base_url = f"{host}:{port}"
-            self.use_https = True
-        elif host.startswith("http://"):
-            self.base_url = f"{host}:{port}"
-            self.use_https = False
+        # Handle full URLs (e.g., from cloud providers)
+        if host.startswith("https://") or host.startswith("http://"):
+            # For cloud providers, host is the full URL, don't append port
+            self.base_url = host
+            self.use_https = host.startswith("https://")
         else:
             # Local development - assume HTTP
             self.base_url = f"http://{host}:{port}"
