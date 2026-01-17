@@ -49,16 +49,16 @@ jobs:
             docker run -d \
               --name smart-prompt-parser \
               -p 8000:8000 \
-              -e PORTKEY_API_KEY=${{ secrets.PORTKEY_API_KEY }} \
-              -e DATABASE_POSTGRESQL_HOST=${{ secrets.DB_HOST }} \
-              -e DATABASE_POSTGRESQL_PASSWORD=${{ secrets.DB_PASSWORD }} \
-              -e DATABASE_POSTGRESQL_USER=${{ secrets.DB_USER }} \
-              -e DATABASE_POSTGRESQL_DB=${{ secrets.DB_NAME }} \
-              -e DATABASE_REDIS_HOST=${{ secrets.REDIS_HOST }} \
-              -e DATABASE_REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
-              -e DATABASE_QDRANT_HOST=${{ secrets.QDRANT_HOST }} \
-              -e DATABASE_QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }} \
-              -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
-              -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
-              -e AWS_DEFAULT_REGION=${{ secrets.AWS_DEFAULT_REGION }} \
+              -e PORTKEY__API_KEY=${{ secrets.PORTKEY_API_KEY }} \
+              -e DATABASE__POSTGRESQL__HOST=${{ secrets.DB_HOST }} \
+              -e DATABASE__POSTGRESQL__PASSWORD=${{ secrets.DB_PASSWORD }} \
+              -e DATABASE__POSTGRESQL__USER=${{ secrets.DB_USER }} \
+              -e DATABASE__POSTGRESQL__DB=${{ secrets.DB_NAME }} \
+              -e DATABASE__REDIS__HOST=${{ secrets.REDIS_HOST }} \
+              -e DATABASE__REDIS__PASSWORD=${{ secrets.REDIS_PASSWORD }} \
+              -e DATABASE__VECTOR_DB__QDRANT__HOST=${{ secrets.QDRANT_HOST }} \
+              -e DATABASE__VECTOR_DB__QDRANT__API_KEY=${{ secrets.QDRANT_API_KEY }} \
+              -e AWS__ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
+              -e AWS__SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+              -e AWS__DEFAULT_REGION=${{ secrets.AWS_DEFAULT_REGION }} \
               ${{ secrets.DOCKER_USERNAME }}/smart-prompt-parser:latest
