@@ -4,7 +4,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 from qdrant_client.models import PointStruct
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from structlog import get_logger
@@ -257,37 +257,6 @@ class ClusteringService:
 
         return cluster
 
-    async def _find_exact_content_match(
-        self, prompt_content: str, current_prompt_id: uuid.UUID
-    ) -> Optional[Tuple[uuid.UUID, float]]:
-        """
-        Find existing prompt with exact same content.
-
-        Args:
-            prompt_content: The prompt content to match
-            current_prompt_id: Current prompt ID (to exclude self-match)
-
-        Returns:
-            Tuple of (cluster_id, similarity_score) or None if no exact match
-        """
-        # Query database for prompts with exact content match
-        stmt = select(Prompt, ClusterAssignment.cluster_id).join(
-            ClusterAssignment, Prompt.id == ClusterAssignment.prompt_id
-        ).where(
-            and_(
-                Prompt.content == prompt_content,
-                Prompt.id != current_prompt_id  # Exclude current prompt
-            )
-        ).limit(1)
-
-        result = await self.db.execute(stmt)
-        row = result.first()
-
-        if row:
-            prompt, cluster_id = row
-            return (cluster_id, 1.0)  # Perfect similarity score for exact match
-
-        return None
 
     def _generate_reasoning(
         self, similarity_score: float, cluster_id: uuid.UUID, is_new: bool = False
@@ -306,7 +275,7 @@ class ClusteringService:
         if is_new:
             return (
                 f"Created new cluster {cluster_id} because no existing cluster "
-                f"matched similarity threshold ({self.similarity_threshold})"
+                f"matched vector similarity threshold ({self.similarity_threshold})"
             )
 
         return (
@@ -334,59 +303,7 @@ class ClusteringService:
         try:
             logger.debug("Assigning prompt to cluster", prompt_id=prompt_id)
 
-            # First, check for exact string match with existing prompts
-            if prompt_content:
-                exact_match = await self._find_exact_content_match(prompt_content, prompt_id)
-                if exact_match:
-                    cluster_id, similarity_score = exact_match
-                    cluster = await self.db.get(Cluster, cluster_id)
-                    is_new_cluster = False
-
-
-                    # Calculate confidence score
-                    confidence_score = 1.0  # Perfect match for exact content
-
-                    # Generate reasoning
-                    reasoning = "Assigned to existing cluster due to exact prompt content match"
-
-                    # Create cluster assignment
-                    assignment = ClusterAssignment(
-                        prompt_id=prompt_id,
-                        cluster_id=cluster_id,
-                        similarity_score=similarity_score,
-                        confidence_score=confidence_score,
-                        reasoning=reasoning,
-                    )
-
-                    self.db.add(assignment)
-                    await self.db.flush()
-
-                    # Store embedding in Qdrant with cluster_id in payload
-                    point_data = {
-                        "id": str(prompt_id),
-                        "vector": embedding,
-                        "payload": {
-                            "prompt_id": str(prompt_id),
-                            "cluster_id": str(cluster_id),
-                            "content": prompt_content or "",
-                        },
-                    }
-
-                    await self.qdrant_client.upsert_points([point_data])
-
-                    await self.db.commit()
-
-                    return {
-                        "prompt_id": prompt_id,
-                        "cluster_id": cluster_id,
-                        "similarity_score": similarity_score,
-                        "confidence_score": confidence_score,
-                        "reasoning": reasoning,
-                        "status": "accepted",
-                        "is_new_cluster": is_new_cluster,
-                    }
-
-            # Find best matching cluster using vector similarity
+            # Find best matching cluster using vector similarity in Qdrant
             best_match = await self._find_best_cluster(embedding, prompt_id)
 
             if best_match:
