@@ -88,14 +88,23 @@ class ConfigLoader:
             # Check if there's a default value: ${VAR:default}
             if ":" in env_var:
                 var_name, default_value = env_var.split(":", 1)
-                return os.getenv(var_name, default_value)
+                value = os.getenv(var_name, default_value)
             else:
                 value = os.getenv(env_var)
                 if value is None:
                     logger.warning(
                         "Environment variable not set", variable=env_var, config_path=str(self.config_path)
                     )
-                return value or config
+                    return config
+
+            # Special handling for S3 dataset URLs - convert comma-separated string to list
+            if env_var.startswith("S3_DATASET_URLS"):
+                if value and value != config:  # If we got a real value, not the placeholder
+                    return [url.strip() for url in value.split(",") if url.strip()]
+                else:
+                    return []  # Return empty list as default
+
+            return value
         else:
             return config
 

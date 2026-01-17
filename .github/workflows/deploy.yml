@@ -74,5 +74,6 @@ jobs:
               -e DATABASE__REDIS__PASSWORD=${{ secrets.REDIS_PASSWORD }} \
               -e DATABASE__VECTOR_DB__QDRANT__HOST=${{ secrets.QDRANT_HOST }}:6333 \
               -e DATABASE__VECTOR_DB__QDRANT__API_KEY=${{ secrets.QDRANT_API_KEY }} \
+              -e S3_DATASET_URLS=https://portkey-ai-builder.s3.us-east-1.amazonaws.com/prompts_dataset.csv \
               -e APP_ENVIRONMENT=production \
               ${{ secrets.DOCKER_USERNAME }}/smart-prompt-parser:latest

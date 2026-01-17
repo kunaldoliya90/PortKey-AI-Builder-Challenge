@@ -10,6 +10,7 @@ from structlog import get_logger
 
 from src.clients.redis import RedisClient, get_redis_client
 from src.models.database import Prompt
+from src.services.clustering import ClusteringService, get_clustering_service
 from src.services.dataset_reader import DatasetReader, get_dataset_reader
 from src.services.embedding import EmbeddingService, get_embedding_service
 from src.services.moderation import ModerationService, get_moderation_service
@@ -27,6 +28,7 @@ class DatasetIngestionWorker:
         dataset_reader: Optional[DatasetReader] = None,
         moderation_service: Optional[ModerationService] = None,
         embedding_service: Optional[EmbeddingService] = None,
+        clustering_service: Optional[ClusteringService] = None,
         redis_client: Optional[RedisClient] = None,
         batch_processor: Optional[BatchProcessor] = None,
     ):
@@ -38,6 +40,7 @@ class DatasetIngestionWorker:
             dataset_reader: Optional DatasetReader instance
             moderation_service: Optional ModerationService instance
             embedding_service: Optional EmbeddingService instance
+            clustering_service: Optional ClusteringService instance
             redis_client: Optional RedisClient instance
             batch_processor: Optional BatchProcessor instance
         """
@@ -45,6 +48,7 @@ class DatasetIngestionWorker:
         self.dataset_reader = dataset_reader or get_dataset_reader()
         self.moderation_service = moderation_service or get_moderation_service()
         self.embedding_service = embedding_service or get_embedding_service()
+        self.clustering_service = clustering_service or get_clustering_service(db)
         self.redis_client = redis_client or get_redis_client()
         self.batch_processor = batch_processor or get_batch_processor()
 
@@ -155,6 +159,32 @@ class DatasetIngestionWorker:
             self.db.add(prompt)
             await self.db.flush()
 
+            # Step 4: Assign to cluster
+            try:
+                clustering_result = await self.clustering_service.assign_to_cluster(
+                    prompt_id=prompt.id,
+                    embedding=embedding,
+                    prompt_content=prompt_content,
+                )
+
+                logger.debug(
+                    "Prompt clustered successfully",
+                    prompt_id=prompt_id,
+                    cluster_id=clustering_result.get("cluster_id"),
+                    is_new_cluster=clustering_result.get("is_new_cluster"),
+                    trace_id=trace_id,
+                )
+
+            except Exception as cluster_error:
+                logger.error(
+                    "Error clustering prompt",
+                    prompt_id=prompt_id,
+                    error=str(cluster_error),
+                    trace_id=trace_id,
+                )
+                # Don't fail the entire ingestion for clustering errors
+                clustering_result = {"error": str(cluster_error)}
+
             logger.debug(
                 "Prompt processed successfully",
                 prompt_id=prompt_id,
@@ -170,6 +200,7 @@ class DatasetIngestionWorker:
                 "embedding_dimensions": len(embedding),
                 "moderation_status": moderation_result["status"],
                 "embedding_metadata": embedding_metadata,
+                "clustering_result": clustering_result,
             }
 
         except Exception as e:
@@ -235,42 +266,55 @@ class DatasetIngestionWorker:
             if not skip_checkpoint:
                 last_processed = await self._get_checkpoint(file_path)
 
-            # Read prompts from file
-            prompts_to_process = []
-            prompt_count = 0
+            # Read prompts from file in chunks
+            total_processed = last_processed or 0
+            chunk_size = 500  # Process in smaller chunks to avoid memory issues
 
-            for prompt_data in self.dataset_reader.read_file(file_path):
-                # Extract prompt content
-                prompt_content = self.dataset_reader._extract_prompt_content(prompt_data)
+            for chunk_num, chunk in enumerate(self.dataset_reader.read_file_chunked(file_path, chunk_size), 1):
+                logger.debug(
+                    "Processing chunk",
+                    file=str(file_path),
+                    chunk_num=chunk_num,
+                    chunk_size=len(chunk),
+                )
 
-                if not prompt_content:
-                    logger.warning("Could not extract prompt content", data=prompt_data)
-                    continue
+                # Convert chunk data to prompts
+                prompts_to_process = []
+                for item in chunk:
+                    # Extract prompt content based on data format
+                    prompt_content = self._extract_prompt_content_from_chunk(item)
 
-                prompt_count += 1
+                    if not prompt_content:
+                        logger.warning("Could not extract prompt content", data=item)
+                        continue
 
-                # Skip if already processed (checkpoint)
-                if last_processed and prompt_count <= last_processed:
-                    continue
+                    total_processed += 1
 
-                prompts_to_process.append((prompt_content, file_path))
+                    # Skip if already processed (checkpoint)
+                    if last_processed and total_processed <= last_processed:
+                        continue
 
-            # Process prompts in batches
-            if prompts_to_process:
-                batches = self.batch_processor.chunk(prompts_to_process)
+                    prompts_to_process.append((prompt_content, file_path))
 
-                for batch_num, batch in enumerate(batches, 1):
-                    logger.debug(
-                        "Processing batch",
-                        file=str(file_path),
-                        batch_num=batch_num,
-                        batch_size=len(batch),
-                    )
+                # Process this chunk's prompts in batches
+                if prompts_to_process:
+                    batches = self.batch_processor.chunk(prompts_to_process)
 
-                    await self._process_batch(batch)
+                    for batch_num, batch in enumerate(batches, 1):
+                        logger.debug(
+                            "Processing batch",
+                            file=str(file_path),
+                            chunk_num=chunk_num,
+                            batch_num=batch_num,
+                            batch_size=len(batch),
+                        )
 
-                    # Save checkpoint after each batch
-                    await self._save_checkpoint(file_path, prompt_count)
+                        await self._process_batch(batch)
+
+                # Save checkpoint after each chunk
+                await self._save_checkpoint(file_path, total_processed)
+
+            prompt_count = total_processed
 
             # Commit database changes
             await self.db.commit()
@@ -306,6 +350,35 @@ class DatasetIngestionWorker:
                 "status": "failed",
                 "error": str(e),
             }
+
+    def _extract_prompt_content_from_chunk(self, data: dict) -> Optional[str]:
+        """
+        Extract prompt content from chunked data format.
+
+        Args:
+            data: Data item from chunk
+
+        Returns:
+            Prompt content string or None
+        """
+        # Handle different data formats
+        if isinstance(data, dict):
+            # Try common keys for prompt content
+            for key in ["text", "prompt", "content", "question", "instruction"]:
+                if key in data and isinstance(data[key], str):
+                    return data[key].strip()
+
+            # If it's a simple dict with one string value, use that
+            if len(data) == 1:
+                value = next(iter(data.values()))
+                if isinstance(value, str):
+                    return value.strip()
+
+        # Handle string data
+        elif isinstance(data, str):
+            return data.strip()
+
+        return None
 
     async def ingest_all(self) -> Dict[str, Any]:
         """

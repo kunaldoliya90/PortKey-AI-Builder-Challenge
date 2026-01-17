@@ -37,12 +37,20 @@ class RedisClient:
                 host = redis_config.host
                 port = redis_config.port
 
-            self._client = Redis.from_url(
-                f"redis://{host}:{port}",
-                password=redis_config.password or None,
-                db=redis_config.db,
-                decode_responses=redis_config.decode_responses,
-            )
+            # Only include password if it's actually set
+            client_kwargs = {
+                "db": redis_config.db,
+                "decode_responses": redis_config.decode_responses,
+            }
+
+            # Only add password if it's not empty/None
+            if redis_config.password and redis_config.password.strip():
+                client_kwargs["password"] = redis_config.password
+                logger.info("Redis client configured with password authentication")
+            else:
+                logger.debug("Redis client configured without password authentication")
+
+            self._client = Redis.from_url(f"redis://{host}:{port}", **client_kwargs)
             logger.info("Redis client initialized", host=host, port=port)
         return self._client
 
@@ -71,7 +79,12 @@ class RedisClient:
                 return value
 
         except Exception as e:
-            logger.error("Redis get error", key=key, error=str(e))
+            error_msg = str(e)
+            # Don't log AUTH errors as errors in local development
+            if "AUTH" in error_msg and "password" in error_msg:
+                logger.debug("Redis AUTH error (expected in local dev)", key=key, error=error_msg)
+            else:
+                logger.error("Redis get error", key=key, error=error_msg)
             return None
 
     async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
@@ -103,7 +116,12 @@ class RedisClient:
             return bool(result)
 
         except Exception as e:
-            logger.error("Redis set error", key=key, error=str(e))
+            error_msg = str(e)
+            # Don't log AUTH errors as errors in local development
+            if "AUTH" in error_msg and "password" in error_msg:
+                logger.debug("Redis AUTH error (expected in local dev)", key=key, error=error_msg)
+            else:
+                logger.error("Redis set error", key=key, error=error_msg)
             return False
 
     async def delete(self, key: str) -> bool:
@@ -123,7 +141,12 @@ class RedisClient:
             return bool(result)
 
         except Exception as e:
-            logger.error("Redis delete error", key=key, error=str(e))
+            error_msg = str(e)
+            # Don't log AUTH errors as errors in local development
+            if "AUTH" in error_msg and "password" in error_msg:
+                logger.debug("Redis AUTH error (expected in local dev)", key=key, error=error_msg)
+            else:
+                logger.error("Redis delete error", key=key, error=error_msg)
             return False
 
     async def exists(self, key: str) -> bool:

@@ -1,6 +1,6 @@
 """Pydantic models for configuration validation."""
 
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -85,6 +85,7 @@ class S3Config(BaseSettings):
 
     bucket: str = Field(default="", description="S3 bucket name")
     region: str = Field(default="us-east-2", description="S3 region")
+    dataset_urls: List[str] = Field(default_factory=list, description="List of S3 URLs for dataset files")
 
 
 class SecretsManagerConfig(BaseSettings):

@@ -13,6 +13,7 @@ from src.clients.qdrant import AsyncQdrantClientWrapper, get_async_qdrant_client
 from src.clients.redis import RedisClient, get_redis_client
 from src.config.settings import get_settings
 from src.models.database import Cluster, ClusterAssignment, Prompt
+from src.services.canonicalization import CanonicalizationService, get_canonicalization_service
 from src.services.similarity import SimilarityService, get_similarity_service
 
 logger = get_logger(__name__)
@@ -30,6 +31,7 @@ class ClusteringService:
         similarity_service: Optional[SimilarityService] = None,
         qdrant_client: Optional[AsyncQdrantClientWrapper] = None,
         redis_client: Optional[RedisClient] = None,
+        canonicalization_service: Optional[CanonicalizationService] = None,
     ):
         """
         Initialize clustering service.
@@ -39,11 +41,13 @@ class ClusteringService:
             similarity_service: Optional SimilarityService instance
             qdrant_client: Optional AsyncQdrantClientWrapper instance
             redis_client: Optional RedisClient instance
+            canonicalization_service: Optional CanonicalizationService instance
         """
         self.db = db
         self.similarity_service = similarity_service or get_similarity_service()
         self.qdrant_client = qdrant_client or get_async_qdrant_client()
         self.redis_client = redis_client or get_redis_client()
+        self.canonicalization_service = canonicalization_service or get_canonicalization_service(db)
 
         settings = get_settings()
         self.similarity_threshold = settings.app.clustering.similarity_threshold
@@ -255,8 +259,38 @@ class ClusteringService:
 
         logger.info("Created new cluster", cluster_id=cluster_id, prompt_id=prompt_id)
 
+        # Trigger template extraction for new cluster (async, don't wait)
+        # This will run in background to avoid blocking cluster assignment
+        import asyncio
+        asyncio.create_task(self._extract_template_for_cluster(cluster_id))
+
         return cluster
 
+    async def _extract_template_for_cluster(self, cluster_id: uuid.UUID):
+        """
+        Extract template for a cluster asynchronously.
+
+        Args:
+            cluster_id: Cluster ID to extract template for
+        """
+        try:
+            # Get prompts in cluster
+            cluster_prompts = await self.get_cluster_prompts(cluster_id)
+            if len(cluster_prompts) < 2:
+                # Need at least 2 prompts for meaningful template extraction
+                logger.debug("Skipping template extraction - insufficient prompts", cluster_id=cluster_id, prompt_count=len(cluster_prompts))
+                return
+
+            # Extract template
+            template_result = await self.canonicalization_service.extract_template(
+                cluster_id=cluster_id,
+                prompts=[p.content for p in cluster_prompts]
+            )
+
+            logger.info("Template extracted for cluster", cluster_id=cluster_id, template_id=template_result.get("template_id"))
+
+        except Exception as e:
+            logger.error("Failed to extract template for cluster", cluster_id=cluster_id, error=str(e))
 
     def _generate_reasoning(
         self, similarity_score: float, cluster_id: uuid.UUID, is_new: bool = False
