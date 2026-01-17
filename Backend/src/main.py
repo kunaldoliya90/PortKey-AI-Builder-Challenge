@@ -4,11 +4,10 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.middleware.auth import APIKeyAuthMiddleware
 from src.api.middleware.logging import RequestLoggingMiddleware
 from src.api.middleware.rate_limit import RateLimitMiddleware
 from src.api.v1 import clusters, evolution, health, prompts, templates
-from src.api.v1.web import clusters as web_clusters, dataset, index, prompts as web_prompts, templates as web_templates
+from src.api.v1.web import clusters as web_clusters, dataset, evolution as web_evolution, index, prompts as web_prompts, templates as web_templates
 from src.config.settings import get_settings
 from src.utils.metrics import metrics_endpoint
 
@@ -57,10 +56,7 @@ app.add_middleware(
 # Add request logging middleware (first, to capture all requests)
 app.add_middleware(RequestLoggingMiddleware)
 
-# Add authentication middleware (after CORS)
-app.add_middleware(APIKeyAuthMiddleware)
-
-# Add rate limiting middleware (after auth)
+# Add rate limiting middleware (after CORS)
 app.add_middleware(RateLimitMiddleware)
 
 # Include API routers
@@ -76,6 +72,7 @@ app.include_router(web_prompts.router)
 app.include_router(dataset.router)
 app.include_router(web_clusters.router)
 app.include_router(web_templates.router)
+app.include_router(web_evolution.router)
 
 
 @app.on_event("startup")
@@ -88,6 +85,9 @@ async def startup_event():
         api_host=settings.app.api.host,
         api_port=settings.app.api.port,
     )
+    
+    # Note: Qdrant collection creation is now done lazily when first needed
+    logger.info("Application startup complete - Qdrant collection will be created on first use")
 
 
 @app.on_event("shutdown")

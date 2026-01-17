@@ -4,7 +4,9 @@ import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 from qdrant_client.models import PointStruct
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from structlog import get_logger
 
 from src.clients.qdrant import AsyncQdrantClientWrapper, get_async_qdrant_client
@@ -149,12 +151,19 @@ class ClusteringService:
         Returns:
             Tuple of (cluster_id, similarity_score) or None if no match
         """
-        # Find similar prompts
+        # Ensure Qdrant collection exists before searching
+        await self.qdrant_client.ensure_collection()
+
+        # Find similar prompts - use lower threshold for search, then filter
+        # This ensures we find all potential matches even if slightly below threshold
+        # For identical prompts, similarity should be ~1.0, so we use a very low threshold
+        # to catch all potential matches
         similar_prompts = await self.similarity_service.find_similar(
-            embedding, limit=20, similarity_threshold=self.similarity_threshold
+            embedding, limit=50, similarity_threshold=0.5  # Very low threshold to find all candidates
         )
 
         if not similar_prompts:
+            logger.debug("No similar prompts found in Qdrant", prompt_id=str(prompt_id))
             return None
 
         # Group by cluster_id and find best match
@@ -181,23 +190,41 @@ class ClusteringService:
         best_score = 0.0
 
         for cluster_id, scores in cluster_scores.items():
+            # Use MAX score instead of average - this ensures identical prompts match
+            # even if there are other prompts in the cluster with lower similarity
+            max_score = max(scores)
+
             # Check cache first
             cached_score = await self._get_cached_similarity(str(prompt_id), str(cluster_id))
             if cached_score:
-                avg_score = cached_score
+                final_score = cached_score
             else:
-                # Calculate average similarity
-                avg_score = sum(scores) / len(scores)
+                final_score = max_score
                 # Cache the result
-                await self._cache_similarity(str(prompt_id), str(cluster_id), avg_score)
+                await self._cache_similarity(str(prompt_id), str(cluster_id), final_score)
 
-            if avg_score > best_score and avg_score >= self.similarity_threshold:
-                best_score = avg_score
+            if final_score > best_score:
+                best_score = final_score
                 best_cluster_id = cluster_id
 
+        # Only return if above threshold
         if best_cluster_id and best_score >= self.similarity_threshold:
+            logger.info(
+                "Found matching cluster",
+                prompt_id=str(prompt_id),
+                cluster_id=str(best_cluster_id),
+                similarity_score=best_score,
+                threshold=self.similarity_threshold,
+            )
             return (best_cluster_id, best_score)
 
+        logger.debug(
+            "No cluster above threshold",
+            prompt_id=str(prompt_id),
+            best_score=best_score if best_cluster_id else 0.0,
+            threshold=self.similarity_threshold,
+            clusters_found=len(cluster_scores),
+        )
         return None
 
     async def _create_new_cluster(
@@ -229,6 +256,38 @@ class ClusteringService:
         logger.info("Created new cluster", cluster_id=cluster_id, prompt_id=prompt_id)
 
         return cluster
+
+    async def _find_exact_content_match(
+        self, prompt_content: str, current_prompt_id: uuid.UUID
+    ) -> Optional[Tuple[uuid.UUID, float]]:
+        """
+        Find existing prompt with exact same content.
+
+        Args:
+            prompt_content: The prompt content to match
+            current_prompt_id: Current prompt ID (to exclude self-match)
+
+        Returns:
+            Tuple of (cluster_id, similarity_score) or None if no exact match
+        """
+        # Query database for prompts with exact content match
+        stmt = select(Prompt, ClusterAssignment.cluster_id).join(
+            ClusterAssignment, Prompt.id == ClusterAssignment.prompt_id
+        ).where(
+            and_(
+                Prompt.content == prompt_content,
+                Prompt.id != current_prompt_id  # Exclude current prompt
+            )
+        ).limit(1)
+
+        result = await self.db.execute(stmt)
+        row = result.first()
+
+        if row:
+            prompt, cluster_id = row
+            return (cluster_id, 1.0)  # Perfect similarity score for exact match
+
+        return None
 
     def _generate_reasoning(
         self, similarity_score: float, cluster_id: uuid.UUID, is_new: bool = False
@@ -275,7 +334,59 @@ class ClusteringService:
         try:
             logger.debug("Assigning prompt to cluster", prompt_id=prompt_id)
 
-            # Find best matching cluster
+            # First, check for exact string match with existing prompts
+            if prompt_content:
+                exact_match = await self._find_exact_content_match(prompt_content, prompt_id)
+                if exact_match:
+                    cluster_id, similarity_score = exact_match
+                    cluster = await self.db.get(Cluster, cluster_id)
+                    is_new_cluster = False
+
+
+                    # Calculate confidence score
+                    confidence_score = 1.0  # Perfect match for exact content
+
+                    # Generate reasoning
+                    reasoning = "Assigned to existing cluster due to exact prompt content match"
+
+                    # Create cluster assignment
+                    assignment = ClusterAssignment(
+                        prompt_id=prompt_id,
+                        cluster_id=cluster_id,
+                        similarity_score=similarity_score,
+                        confidence_score=confidence_score,
+                        reasoning=reasoning,
+                    )
+
+                    self.db.add(assignment)
+                    await self.db.flush()
+
+                    # Store embedding in Qdrant with cluster_id in payload
+                    point_data = {
+                        "id": str(prompt_id),
+                        "vector": embedding,
+                        "payload": {
+                            "prompt_id": str(prompt_id),
+                            "cluster_id": str(cluster_id),
+                            "content": prompt_content or "",
+                        },
+                    }
+
+                    await self.qdrant_client.upsert_points([point_data])
+
+                    await self.db.commit()
+
+                    return {
+                        "prompt_id": prompt_id,
+                        "cluster_id": cluster_id,
+                        "similarity_score": similarity_score,
+                        "confidence_score": confidence_score,
+                        "reasoning": reasoning,
+                        "status": "accepted",
+                        "is_new_cluster": is_new_cluster,
+                    }
+
+            # Find best matching cluster using vector similarity
             best_match = await self._find_best_cluster(embedding, prompt_id)
 
             if best_match:
@@ -320,18 +431,21 @@ class ClusteringService:
             self.db.add(assignment)
             await self.db.flush()
 
+            # Ensure collection exists before storing
+            await self.qdrant_client.ensure_collection()
+
             # Store embedding in Qdrant with cluster_id in payload
-            point = PointStruct(
-                id=str(prompt_id),
-                vector=embedding,
-                payload={
+            point_data = {
+                "id": str(prompt_id),
+                "vector": embedding,
+                "payload": {
                     "prompt_id": str(prompt_id),
                     "cluster_id": str(cluster_id),
                     "content": prompt_content or "",
                 },
-            )
+            }
 
-            await self.qdrant_client.upsert_points([point])
+            await self.qdrant_client.upsert_points([point_data])
 
             logger.info(
                 "Prompt assigned to cluster",
@@ -366,8 +480,6 @@ class ClusteringService:
             List of Prompt objects
         """
         # Query cluster assignments
-        from sqlalchemy import select
-
         stmt = select(ClusterAssignment).where(ClusterAssignment.cluster_id == cluster_id)
         result = await self.db.execute(stmt)
         assignments = result.scalars().all()

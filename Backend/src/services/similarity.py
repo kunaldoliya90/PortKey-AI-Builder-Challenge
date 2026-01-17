@@ -47,6 +47,9 @@ class SimilarityService:
             List of similar prompts with id, score, and payload
         """
         try:
+            # Ensure collection exists before searching
+            await self.qdrant_client.ensure_collection()
+            
             threshold = similarity_threshold or self.similarity_threshold
 
             logger.debug(
@@ -71,7 +74,7 @@ class SimilarityService:
             return results
 
         except Exception as e:
-            logger.error("Error in similarity search", error=str(e))
+            logger.error("Error in similarity search", error=str(e), embedding_dim=len(embedding), limit=limit, threshold=threshold)
             return []
 
     async def find_top_k_similar(

@@ -1,16 +1,10 @@
 """Qdrant client wrapper for vector database operations."""
 
+import asyncio
 from typing import List, Optional
 
-from qdrant_client import AsyncQdrantClient, QdrantClient
-from qdrant_client.models import (
-    CollectionStatus,
-    Distance,
-    HnswConfigDiff,
-    OptimizersConfigDiff,
-    PointStruct,
-    VectorParams,
-)
+import requests
+from qdrant_client.models import PointStruct
 from structlog import get_logger
 
 from src.config.settings import get_settings
@@ -22,214 +16,31 @@ COLLECTION_NAME = "prompt_embeddings"
 VECTOR_SIZE = 1536  # text-embedding-3-small dimension
 
 
-class QdrantClientWrapper:
-    """Wrapper for Qdrant client with connection management."""
-
-    def __init__(self, client: Optional[QdrantClient] = None):
-        """
-        Initialize Qdrant client wrapper.
-
-        Args:
-            client: Optional QdrantClient instance. If None, creates a new one.
-        """
-        if client is None:
-            settings = get_settings()
-            qdrant_config = settings.database.vector_db.qdrant
-
-            if not qdrant_config:
-                raise ValueError("Qdrant configuration not found")
-
-            # Create client
-            self.client = QdrantClient(
-                url=f"http://{qdrant_config.host}:{qdrant_config.port}",
-                api_key=qdrant_config.api_key,
-            )
-
-            logger.info(
-                "Qdrant client initialized",
-                host=qdrant_config.host,
-                port=qdrant_config.port,
-            )
-        else:
-            self.client = client
-
-    def ensure_collection(self) -> bool:
-        """
-        Ensure collection exists with correct configuration.
-
-        Returns:
-            True if collection exists or was created, False otherwise
-        """
-        try:
-            # Check if collection exists
-            collections = self.client.get_collections()
-            collection_names = [col.name for col in collections.collections]
-
-            if COLLECTION_NAME in collection_names:
-                logger.info("Collection already exists", collection=COLLECTION_NAME)
-                return True
-
-            # Create collection
-            logger.info("Creating collection", collection=COLLECTION_NAME)
-
-            self.client.create_collection(
-                collection_name=COLLECTION_NAME,
-                vectors_config=VectorParams(
-                    size=VECTOR_SIZE,
-                    distance=Distance.COSINE,
-                ),
-                hnsw_config=HnswConfigDiff(
-                    m=16,  # Number of connections
-                    ef_construct=100,  # Size of the candidate list
-                ),
-                optimizers_config=OptimizersConfigDiff(
-                    indexing_threshold=10000,  # Index when this many points
-                ),
-            )
-
-            logger.info("Collection created successfully", collection=COLLECTION_NAME)
-            return True
-
-        except Exception as e:
-            logger.error("Error ensuring collection", error=str(e), collection=COLLECTION_NAME)
-            return False
-
-    def get_collection_info(self) -> Optional[dict]:
-        """
-        Get collection information.
-
-        Returns:
-            Collection info dictionary or None if collection doesn't exist
-        """
-        try:
-            info = self.client.get_collection(COLLECTION_NAME)
-            return {
-                "name": info.name,
-                "vectors_count": info.vectors_count,
-                "points_count": info.points_count,
-                "status": info.status,
-            }
-        except Exception as e:
-            logger.error("Error getting collection info", error=str(e))
-            return None
-
-    def upsert_points(self, points: List[PointStruct]) -> bool:
-        """
-        Upsert points into collection.
-
-        Args:
-            points: List of PointStruct objects
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            self.client.upsert(collection_name=COLLECTION_NAME, points=points)
-            logger.debug("Points upserted", count=len(points), collection=COLLECTION_NAME)
-            return True
-        except Exception as e:
-            logger.error("Error upserting points", error=str(e), count=len(points))
-            return False
-
-    def search(
-        self,
-        query_vector: List[float],
-        limit: int = 10,
-        score_threshold: Optional[float] = None,
-    ) -> List[dict]:
-        """
-        Search for similar vectors.
-
-        Args:
-            query_vector: Query embedding vector
-            limit: Maximum number of results
-            score_threshold: Optional minimum similarity score
-
-        Returns:
-            List of search results with id and score
-        """
-        try:
-            search_result = self.client.search(
-                collection_name=COLLECTION_NAME,
-                query_vector=query_vector,
-                limit=limit,
-                score_threshold=score_threshold,
-            )
-
-            results = [
-                {
-                    "id": hit.id,
-                    "score": hit.score,
-                    "payload": hit.payload or {},
-                }
-                for hit in search_result
-            ]
-
-            logger.debug(
-                "Search completed",
-                results_count=len(results),
-                limit=limit,
-                score_threshold=score_threshold,
-            )
-
-            return results
-
-        except Exception as e:
-            logger.error("Error searching", error=str(e))
-            return []
-
-    def delete_points(self, point_ids: List[str]) -> bool:
-        """
-        Delete points from collection.
-
-        Args:
-            point_ids: List of point IDs to delete
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            self.client.delete(
-                collection_name=COLLECTION_NAME,
-                points_selector=point_ids,
-            )
-            logger.debug("Points deleted", count=len(point_ids), collection=COLLECTION_NAME)
-            return True
-        except Exception as e:
-            logger.error("Error deleting points", error=str(e), count=len(point_ids))
-            return False
-
-
+# Synchronous Qdrant client wrapper removed - using HTTP requests instead
 class AsyncQdrantClientWrapper:
-    """Async wrapper for Qdrant client."""
+    """Async wrapper for Qdrant client using HTTP requests."""
 
-    def __init__(self, client: Optional[AsyncQdrantClient] = None):
-        """
-        Initialize async Qdrant client wrapper.
+    def __init__(self):
+        """Initialize async Qdrant client wrapper using HTTP requests."""
+        settings = get_settings()
+        qdrant_config = settings.database.vector_db.qdrant
 
-        Args:
-            client: Optional AsyncQdrantClient instance. If None, creates a new one.
-        """
-        if client is None:
-            settings = get_settings()
-            qdrant_config = settings.database.vector_db.qdrant
+        if not qdrant_config:
+            raise ValueError("Qdrant configuration not found")
 
-            if not qdrant_config:
-                raise ValueError("Qdrant configuration not found")
+        # Use IP address directly to avoid DNS resolution issues
+        host = qdrant_config.host
+        if host == "127.0.0.1" or host == "localhost":
+            host = "127.0.0.1"  # Force IPv4
+        self.base_url = f"http://{host}:{qdrant_config.port}"
+        self.api_key = qdrant_config.api_key
+        self.session = requests.Session()
+        self.session.timeout = 30.0
 
-            # Create async client
-            self.client = AsyncQdrantClient(
-                url=f"http://{qdrant_config.host}:{qdrant_config.port}",
-                api_key=qdrant_config.api_key,
-            )
-
-            logger.info(
-                "Async Qdrant client initialized",
-                host=qdrant_config.host,
-                port=qdrant_config.port,
-            )
-        else:
-            self.client = client
+        logger.info(
+            "Async Qdrant HTTP client initialized",
+            base_url=self.base_url,
+        )
 
     async def ensure_collection(self) -> bool:
         """
@@ -238,39 +49,66 @@ class AsyncQdrantClientWrapper:
         Returns:
             True if collection exists or was created, False otherwise
         """
-        try:
-            # Check if collection exists
-            collections = await self.client.get_collections()
-            collection_names = [col.name for col in collections.collections]
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Check if collection exists
+                headers = {}
+                if self.api_key:
+                    headers["api-key"] = self.api_key
 
-            if COLLECTION_NAME in collection_names:
-                logger.info("Collection already exists", collection=COLLECTION_NAME)
-                return True
+                response = await asyncio.to_thread(
+                    self.session.get,
+                    f"{self.base_url}/collections/{COLLECTION_NAME}",
+                    headers=headers
+                )
+                if response.status_code == 200:
+                    logger.info("Collection already exists", collection=COLLECTION_NAME)
+                    return True
 
-            # Create collection
-            logger.info("Creating collection", collection=COLLECTION_NAME)
+                # Create collection
+                logger.info("Creating collection", collection=COLLECTION_NAME, attempt=attempt+1)
 
-            await self.client.create_collection(
-                collection_name=COLLECTION_NAME,
-                vectors_config=VectorParams(
-                    size=VECTOR_SIZE,
-                    distance=Distance.COSINE,
-                ),
-                hnsw_config=HnswConfigDiff(
-                    m=16,  # Number of connections
-                    ef_construct=100,  # Size of the candidate list
-                ),
-                optimizers_config=OptimizersConfigDiff(
-                    indexing_threshold=10000,  # Index when this many points
-                ),
-            )
+                collection_config = {
+                    "vectors": {
+                        "size": VECTOR_SIZE,
+                        "distance": "Cosine"
+                    },
+                    "hnsw_config": {
+                        "m": 16,
+                        "ef_construct": 100
+                    },
+                    "optimizers_config": {
+                        "indexing_threshold": 10000
+                    }
+                }
 
-            logger.info("Collection created successfully", collection=COLLECTION_NAME)
-            return True
+                headers = {"Content-Type": "application/json"}
+                if self.api_key:
+                    headers["api-key"] = self.api_key
 
-        except Exception as e:
-            logger.error("Error ensuring collection", error=str(e), collection=COLLECTION_NAME)
-            return False
+                response = await asyncio.to_thread(
+                    self.session.put,
+                    f"{self.base_url}/collections/{COLLECTION_NAME}",
+                    json=collection_config,
+                    headers=headers
+                )
+
+                if response.status_code in [200, 201]:
+                    logger.info("Collection created successfully", collection=COLLECTION_NAME)
+                    return True
+                else:
+                    logger.error("Failed to create collection", status=response.status_code, response=response.text)
+
+            except Exception as e:
+                logger.warning("Error ensuring collection", error=str(e), collection=COLLECTION_NAME, attempt=attempt+1)
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2)  # Wait before retry
+                else:
+                    logger.error("Failed to ensure collection after retries", error=str(e), collection=COLLECTION_NAME)
+                    return False
+
+        return False
 
     async def get_collection_info(self) -> Optional[dict]:
         """
@@ -302,12 +140,60 @@ class AsyncQdrantClientWrapper:
             True if successful, False otherwise
         """
         try:
-            await self.client.upsert(collection_name=COLLECTION_NAME, points=points)
-            logger.debug("Points upserted", count=len(points), collection=COLLECTION_NAME)
-            return True
+            # Ensure collection exists before upserting
+            await self.ensure_collection()
+
+            # Convert points to dict format for HTTP API
+            points_data = []
+            for point in points:
+                if isinstance(point, dict):
+                    # Already in dict format
+                    points_data.append(point)
+                else:
+                    # Handle PointStruct or other formats
+                    point_id = getattr(point, 'id', None)
+                    vector = getattr(point, 'vector', None)
+                    payload = getattr(point, 'payload', None) or {}
+
+                    if point_id is None or vector is None:
+                        logger.error("Invalid point format", point_type=type(point), point_attrs=dir(point) if hasattr(point, '__dict__') else 'no attrs')
+                        continue
+
+                    point_dict = {
+                        "id": str(point_id),
+                        "vector": vector,
+                        "payload": payload
+                    }
+                    points_data.append(point_dict)
+
+            if not points_data:
+                logger.error("No valid points to upsert")
+                return False
+
+            request_data = {"points": points_data}
+            logger.info("Upsert request data", points_data_sample=points_data[0] if points_data else None, payload_sample=points_data[0].get('payload') if points_data else None)
+
+            headers = {"Content-Type": "application/json"}
+            if self.api_key:
+                headers["api-key"] = self.api_key
+
+            response = await asyncio.to_thread(
+                self.session.put,
+                f"{self.base_url}/collections/{COLLECTION_NAME}/points",
+                json=request_data,
+                headers=headers,
+                timeout=10.0
+            )
+
+            if response.status_code in [200, 201]:
+                return True
+            else:
+                logger.error("Failed to upsert points", status=response.status_code, response=response.text[:500])
+                raise Exception(f"Upsert failed: {response.status_code} - {response.text[:500]}")
+
         except Exception as e:
             logger.error("Error upserting points", error=str(e), count=len(points))
-            return False
+            raise
 
     async def search(
         self,
@@ -327,33 +213,46 @@ class AsyncQdrantClientWrapper:
             List of search results with id and score
         """
         try:
-            search_result = await self.client.search(
-                collection_name=COLLECTION_NAME,
-                query_vector=query_vector,
-                limit=limit,
-                score_threshold=score_threshold,
+            # Ensure collection exists
+            await self.ensure_collection()
+
+            search_data = {
+                "vector": query_vector,
+                "limit": limit,
+                "with_payload": True
+            }
+            if score_threshold is not None:
+                search_data["score_threshold"] = score_threshold
+
+            headers = {"Content-Type": "application/json"}
+            if self.api_key:
+                headers["api-key"] = self.api_key
+
+            response = await asyncio.to_thread(
+                self.session.post,
+                f"{self.base_url}/collections/{COLLECTION_NAME}/points/search",
+                json=search_data,
+                headers=headers
             )
 
-            results = [
-                {
-                    "id": hit.id,
-                    "score": hit.score,
-                    "payload": hit.payload or {},
-                }
-                for hit in search_result
-            ]
+            if response.status_code == 200:
+                response_data = response.json()
+                results = [
+                    {
+                        "id": hit["id"],
+                        "score": hit["score"],
+                        "payload": hit.get("payload", {}),
+                    }
+                    for hit in response_data.get("result", [])
+                ]
 
-            logger.debug(
-                "Search completed",
-                results_count=len(results),
-                limit=limit,
-                score_threshold=score_threshold,
-            )
-
-            return results
+                return results
+            else:
+                logger.error("Search failed", status=response.status_code, response=response.text)
+                return []
 
         except Exception as e:
-            logger.error("Error searching", error=str(e))
+            logger.error("Error searching Qdrant", error=str(e), query_vector_dim=len(query_vector), limit=limit, score_threshold=score_threshold)
             return []
 
     async def delete_points(self, point_ids: List[str]) -> bool:
@@ -379,21 +278,7 @@ class AsyncQdrantClientWrapper:
 
 
 # Global client instances
-_qdrant_client: Optional[QdrantClientWrapper] = None
 _async_qdrant_client: Optional[AsyncQdrantClientWrapper] = None
-
-
-def get_qdrant_client() -> QdrantClientWrapper:
-    """
-    Get global Qdrant client instance.
-
-    Returns:
-        QdrantClientWrapper instance
-    """
-    global _qdrant_client
-    if _qdrant_client is None:
-        _qdrant_client = QdrantClientWrapper()
-    return _qdrant_client
 
 
 def get_async_qdrant_client() -> AsyncQdrantClientWrapper:

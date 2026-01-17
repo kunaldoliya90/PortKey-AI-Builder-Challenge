@@ -104,8 +104,8 @@ async def ingest_prompt(
         )
 
         return PromptIngestionResponse(
-            prompt_id=uuid.UUID(assignment_result["prompt_id"]),
-            cluster_id=uuid.UUID(assignment_result["cluster_id"]) if assignment_result.get("cluster_id") else None,
+            prompt_id=assignment_result["prompt_id"] if isinstance(assignment_result["prompt_id"], uuid.UUID) else uuid.UUID(assignment_result["prompt_id"]),
+            cluster_id=assignment_result["cluster_id"] if isinstance(assignment_result.get("cluster_id"), uuid.UUID) else uuid.UUID(assignment_result["cluster_id"]) if assignment_result.get("cluster_id") else None,
             similarity_score=assignment_result.get("similarity_score"),
             confidence_score=assignment_result.get("confidence_score"),
             reasoning=assignment_result.get("reasoning"),

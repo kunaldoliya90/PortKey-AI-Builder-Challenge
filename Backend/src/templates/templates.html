@@ -1,34 +1,48 @@
 {% extends "base.html" %}
 
-{% block title %}Templates - Smart Prompt Parser{% endblock %}
+{% block title %}Canonical Templates{% endblock %}
 
 {% block content %}
 <h1>Canonical Templates</h1>
+<p>View extracted prompt templates with variable slots</p>
+
+<div class="filters" style="margin: 1rem 0;">
+    <a href="/templates" class="btn">All Templates</a>
+    <a href="/" class="btn">Back to Home</a>
+</div>
 
 <table>
     <thead>
         <tr>
-            <th>ID</th>
-            <th>Cluster</th>
+            <th>Template ID</th>
             <th>Version</th>
             <th>Template</th>
+            <th>Slots</th>
             <th>Confidence</th>
             <th>Created</th>
             <th>Actions</th>
         </tr>
     </thead>
     <tbody>
-        {% for template in templates %}
-        <tr>
-            <td><code>{{ template.id[:8] }}...</code></td>
-            <td><code>{{ template.cluster_id[:8] }}...</code></td>
-            <td>{{ template.version }}</td>
-            <td>{{ template.template_content[:50] }}...</td>
-            <td>{{ "%.2f"|format(template.confidence_score) if template.confidence_score else 'N/A' }}</td>
-            <td>{{ template.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-            <td><a href="/templates/{{ template.id }}">View</a></td>
-        </tr>
-        {% endfor %}
+        {% if templates %}
+            {% for template in templates %}
+            <tr>
+                <td><code>{{ template.id[:8] }}...</code></td>
+                <td>{{ template.version }}</td>
+                <td class="template-preview">{{ template.template_content[:80] }}...</td>
+                <td>{{ template.slots|length if template.slots else 0 }}</td>
+                <td>{{ "%.2f"|format(template.confidence_score) if template.confidence_score else 'N/A' }}</td>
+                <td>{{ template.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td><a href="/templates/{{ template.id }}">View Details</a></td>
+            </tr>
+            {% endfor %}
+        {% else %}
+            <tr>
+                <td colspan="7" style="text-align: center; padding: 2rem;">
+                    No templates found. Process some prompts to extract templates!
+                </td>
+            </tr>
+        {% endif %}
     </tbody>
 </table>
 
@@ -38,12 +52,21 @@
     <a href="?page={{ page - 1 }}">Previous</a>
     {% endif %}
     
-    <span class="active">{{ page }}</span>
+    <span class="active">Page {{ page }} of {{ (total / page_size)|round|int + 1 }}</span>
     
     {% if page * page_size < total %}
     <a href="?page={{ page + 1 }}">Next</a>
     {% endif %}
 </div>
 {% endif %}
-{% endblock %}
 
+<style>
+.template-preview {
+    font-family: monospace;
+    font-size: 0.9rem;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+</style>
+{% endblock %}

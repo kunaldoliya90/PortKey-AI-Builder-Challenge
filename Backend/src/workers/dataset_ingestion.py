@@ -337,6 +337,18 @@ class DatasetIngestionWorker:
 
         logger.info("Dataset ingestion completed", stats=self.stats)
 
+        # Get cluster and template counts
+        from src.models.database import Cluster, CanonicalTemplate
+        from sqlalchemy import select, func
+        
+        cluster_count_stmt = select(func.count(Cluster.id))
+        cluster_result = await self.db.execute(cluster_count_stmt)
+        cluster_count = cluster_result.scalar() or 0
+        
+        template_count_stmt = select(func.count(CanonicalTemplate.id))
+        template_result = await self.db.execute(template_count_stmt)
+        template_count = template_result.scalar() or 0
+        
         return {
             "status": "completed",
             "stats": self.stats,
@@ -346,6 +358,8 @@ class DatasetIngestionWorker:
                 "prompts_processed": self.stats["prompts_processed"],
                 "prompts_accepted": self.stats["prompts_accepted"],
                 "prompts_rejected": self.stats["prompts_rejected"],
+                "clusters_created": cluster_count,
+                "templates_extracted": template_count,
                 "error_count": len(self.stats["errors"]),
             },
         }

@@ -55,12 +55,28 @@ async def clusters_page(
         count_result = await db.execute(count_stmt)
         prompt_count = count_result.scalar() or 0
 
+        # Get a sample prompt from this cluster
+        from src.models.database import Prompt
+        
+        sample_prompt = None
+        if prompt_count > 0:
+            assignment_stmt = select(ClusterAssignment.prompt_id).where(
+                ClusterAssignment.cluster_id == cluster.id
+            ).limit(1)
+            assignment_result = await db.execute(assignment_stmt)
+            assignment = assignment_result.scalar_one_or_none()
+            if assignment:
+                prompt = await db.get(Prompt, assignment)
+                if prompt:
+                    sample_prompt = prompt.content[:100] + "..." if len(prompt.content) > 100 else prompt.content
+
         cluster_dict = {
             "id": str(cluster.id),
             "name": cluster.name,
             "prompt_count": prompt_count,
             "confidence_score": cluster.confidence_score,
             "created_at": cluster.created_at,
+            "sample_prompt": sample_prompt or "No prompts",
         }
         clusters_with_counts.append(cluster_dict)
 
@@ -122,7 +138,7 @@ async def cluster_detail_page(
             "prompts": [
                 {
                     "id": str(p.id),
-                    "content": p.content[:100] + "..." if len(p.content) > 100 else p.content,
+                    "content": p.content,  # Show full content
                     "created_at": p.created_at,
                 }
                 for p in prompts

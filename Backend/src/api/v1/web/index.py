@@ -39,15 +39,9 @@ async def home(request: Request, db: AsyncSession = Depends(get_db)):
         prompt_result = await db.execute(prompt_count_stmt)
         prompt_count = prompt_result.scalar() or 0
 
-        stats = {
-            "clusters": cluster_count,
-            "templates": template_count,
-            "prompts": prompt_count,
-        }
-
         return templates.TemplateResponse(
             "index.html",
-            {"request": request, "stats": stats},
+            {"request": request},
         )
 
     except Exception as e:

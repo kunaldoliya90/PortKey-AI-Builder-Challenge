@@ -51,7 +51,7 @@ models:
   # Moderation model configuration
   moderation:
     # Model for content moderation and safety checks
-    model: "@openai/text-moderation-latest"
+    model: "@openai/omni-moderation-latest"
 
 # AWS Configuration
 # AWS services configuration for deployment and infrastructure
