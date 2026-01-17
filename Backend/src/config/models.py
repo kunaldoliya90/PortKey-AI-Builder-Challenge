@@ -57,7 +57,7 @@ class ModerationModelConfig(BaseSettings):
     """Moderation model configuration."""
 
     model: str = Field(
-        default="@openai/text-moderation-latest",
+        default="@openai/omni-moderation-latest",
         description="Content moderation model",
     )
 

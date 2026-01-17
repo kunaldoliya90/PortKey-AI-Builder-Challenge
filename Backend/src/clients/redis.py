@@ -28,13 +28,22 @@ class RedisClient:
         """Get or create Redis client."""
         if self._client is None:
             redis_config = self._settings.database.redis
+
+            # Handle host:port format in host field (e.g., from RedisLabs)
+            if ":" in redis_config.host:
+                host, port_str = redis_config.host.rsplit(":", 1)
+                port = int(port_str)
+            else:
+                host = redis_config.host
+                port = redis_config.port
+
             self._client = Redis.from_url(
-                f"redis://{redis_config.host}:{redis_config.port}",
+                f"redis://{host}:{port}",
                 password=redis_config.password or None,
                 db=redis_config.db,
                 decode_responses=redis_config.decode_responses,
             )
-            logger.info("Redis client initialized", host=redis_config.host, port=redis_config.port)
+            logger.info("Redis client initialized", host=host, port=port)
         return self._client
 
     async def get(self, key: str) -> Optional[Any]:
