@@ -31,14 +31,24 @@ setup: venv install ## Complete setup: create venv and install dependencies
 	@echo "  5. Run 'make dev' to start the application"
 
 venv: ## Create virtual environment
-	@echo "$(YELLOW)Creating virtual environment...$(NC)"
-	@python3 -m venv $(VENV)
-	@echo "$(GREEN)✓ Virtual environment created$(NC)"
+	@echo "$(YELLOW)Checking Python version...$(NC)"
+	@PYTHON_CMD=$$(which python3.11 2>/dev/null || which python3.12 2>/dev/null || which python3.13 2>/dev/null || which python3); \
+	if [ -z "$$PYTHON_CMD" ]; then \
+		echo "$(RED)Error: Python 3.11+ not found. Please install Python 3.11 or higher.$(NC)"; \
+		exit 1; \
+	fi; \
+	PYTHON_VERSION=$$($$PYTHON_CMD --version 2>&1); \
+	echo "Using: $$PYTHON_VERSION"; \
+	echo "$(YELLOW)Creating virtual environment...$(NC)"; \
+	$$PYTHON_CMD -m venv $(VENV); \
+	mkdir -p $(VENV)/pip; \
+	cp pip.conf $(VENV)/pip/pip.conf 2>/dev/null || true; \
+	echo "$(GREEN)✓ Virtual environment created$(NC)"
 
 install: venv ## Install dependencies
 	@echo "$(YELLOW)Installing dependencies...$(NC)"
-	@$(PIP) install --upgrade pip
-	@$(PIP) install -r requirements-dev.txt
+	@$(PIP) install --upgrade pip --index-url https://pypi.org/simple --trusted-host pypi.org
+	@$(PIP) install -r requirements-dev.txt --index-url https://pypi.org/simple --trusted-host pypi.org --no-deps || $(PIP) install -r requirements-dev.txt --index-url https://pypi.org/simple --trusted-host pypi.org
 	@echo "$(GREEN)✓ Dependencies installed$(NC)"
 
 install-prod: venv ## Install production dependencies only
@@ -65,7 +75,7 @@ logs: ## View Docker service logs
 
 migrate: ## Run database migrations
 	@echo "$(YELLOW)Running database migrations...$(NC)"
-	@$(ALEMBIC) upgrade head
+	@cd migrations && ../$(ALEMBIC) upgrade head
 	@echo "$(GREEN)✓ Migrations completed$(NC)"
 
 migrate-create: ## Create a new migration (usage: make migrate-create MESSAGE="description")
@@ -75,7 +85,7 @@ migrate-create: ## Create a new migration (usage: make migrate-create MESSAGE="d
 		exit 1; \
 	fi
 	@echo "$(YELLOW)Creating migration: $(MESSAGE)$(NC)"
-	@$(ALEMBIC) revision --autogenerate -m "$(MESSAGE)"
+	@cd migrations && ../$(ALEMBIC) revision --autogenerate -m "$(MESSAGE)"
 	@echo "$(GREEN)✓ Migration created$(NC)"
 
 run: ## Run the application (production mode)

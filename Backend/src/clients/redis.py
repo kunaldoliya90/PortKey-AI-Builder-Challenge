@@ -3,7 +3,7 @@
 import json
 from typing import Any, Optional
 
-import aioredis
+from redis.asyncio import Redis
 from structlog import get_logger
 
 from src.config.settings import get_settings
@@ -14,23 +14,23 @@ logger = get_logger(__name__)
 class RedisClient:
     """Redis client wrapper for caching operations."""
 
-    def __init__(self, redis_client: Optional[aioredis.Redis] = None):
+    def __init__(self, redis_client: Optional[Redis] = None):
         """
         Initialize Redis client.
 
         Args:
-            redis_client: Optional aioredis.Redis instance. If None, creates a new one.
+            redis_client: Optional Redis instance. If None, creates a new one.
         """
-        self._client: Optional[aioredis.Redis] = redis_client
+        self._client: Optional[Redis] = redis_client
         self._settings = get_settings()
 
-    async def _get_client(self) -> aioredis.Redis:
+    async def _get_client(self) -> Redis:
         """Get or create Redis client."""
         if self._client is None:
             redis_config = self._settings.database.redis
-            self._client = await aioredis.from_url(
+            self._client = Redis.from_url(
                 f"redis://{redis_config.host}:{redis_config.port}",
-                password=redis_config.password,
+                password=redis_config.password or None,
                 db=redis_config.db,
                 decode_responses=redis_config.decode_responses,
             )
@@ -136,10 +136,25 @@ class RedisClient:
             logger.error("Redis exists error", key=key, error=str(e))
             return False
 
+    async def ping(self) -> bool:
+        """
+        Ping Redis server.
+
+        Returns:
+            True if Redis is reachable
+        """
+        try:
+            client = await self._get_client()
+            result = await client.ping()
+            return bool(result)
+        except Exception as e:
+            logger.error("Redis ping error", error=str(e))
+            return False
+
     async def close(self):
         """Close Redis connection."""
         if self._client:
-            await self._client.close()
+            await self._client.aclose()
             self._client = None
             logger.info("Redis client closed")
 
@@ -159,4 +174,3 @@ def get_redis_client() -> RedisClient:
     if _redis_client is None:
         _redis_client = RedisClient()
     return _redis_client
-
