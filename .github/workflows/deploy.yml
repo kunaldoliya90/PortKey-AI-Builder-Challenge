@@ -45,6 +45,21 @@ jobs:
             # Pull the new image
             docker pull ${{ secrets.DOCKER_USERNAME }}/smart-prompt-parser:latest
 
+            # Run database migrations
+            echo "Running database migrations..."
+            docker run --rm \
+              -e PORTKEY__API_KEY=${{ secrets.PORTKEY_API_KEY }} \
+              -e DATABASE__POSTGRESQL__HOST=${{ secrets.DB_HOST }} \
+              -e DATABASE__POSTGRESQL__PASSWORD=${{ secrets.DB_PASSWORD }} \
+              -e DATABASE__POSTGRESQL__USERNAME=${{ secrets.DB_USER }} \
+              -e DATABASE__POSTGRESQL__DATABASE=${{ secrets.DB_NAME }} \
+              -e DATABASE__REDIS__HOST=${{ secrets.REDIS_HOST }} \
+              -e DATABASE__REDIS__PASSWORD=${{ secrets.REDIS_PASSWORD }} \
+              -e DATABASE__VECTOR_DB__QDRANT__HOST=${{ secrets.QDRANT_HOST }} \
+              -e DATABASE__VECTOR_DB__QDRANT__API_KEY=${{ secrets.QDRANT_API_KEY }} \
+              ${{ secrets.DOCKER_USERNAME }}/smart-prompt-parser:latest \
+              bash -c "cd migrations && ../venv/bin/alembic upgrade head"
+
             # Run the new container with environment variables
             docker run -d \
               --name smart-prompt-parser \
