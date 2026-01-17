@@ -76,14 +76,14 @@ class ModelsConfig(BaseSettings):
 class ECRConfig(BaseSettings):
     """ECR configuration."""
 
-    repository: str = Field(..., description="ECR repository URL")
+    repository: str = Field(default="", description="ECR repository URL")
     region: str = Field(default="us-east-2", description="ECR region")
 
 
 class S3Config(BaseSettings):
     """S3 configuration."""
 
-    bucket: str = Field(..., description="S3 bucket name")
+    bucket: str = Field(default="", description="S3 bucket name")
     region: str = Field(default="us-east-2", description="S3 region")
 
 
@@ -101,8 +101,8 @@ class AWSConfig(BaseSettings):
     """AWS configuration."""
 
     region: str = Field(default="us-east-2", description="Default AWS region")
-    ecr: ECRConfig = Field(..., description="ECR configuration")
-    s3: S3Config = Field(..., description="S3 configuration")
+    ecr: ECRConfig = Field(default_factory=ECRConfig, description="ECR configuration")
+    s3: S3Config = Field(default_factory=S3Config, description="S3 configuration")
     secrets_manager: SecretsManagerConfig = Field(
         default_factory=SecretsManagerConfig, description="Secrets Manager configuration"
     )
@@ -287,7 +287,7 @@ class Settings(BaseSettings):
 
     portkey: PortkeyConfig = Field(..., description="Portkey AI configuration")
     models: ModelsConfig = Field(default_factory=ModelsConfig, description="Model configurations")
-    aws: AWSConfig = Field(..., description="AWS configuration")
+    aws: AWSConfig = Field(default_factory=AWSConfig, description="AWS configuration")
     database: DatabaseConfig = Field(..., description="Database configuration")
     app: AppConfig = Field(default_factory=AppConfig, description="Application configuration")
     observability: ObservabilityConfig = Field(

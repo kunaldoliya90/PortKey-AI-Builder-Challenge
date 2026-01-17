@@ -52,13 +52,10 @@ jobs:
               -e PORTKEY__API_KEY=${{ secrets.PORTKEY_API_KEY }} \
               -e DATABASE__POSTGRESQL__HOST=${{ secrets.DB_HOST }} \
               -e DATABASE__POSTGRESQL__PASSWORD=${{ secrets.DB_PASSWORD }} \
-              -e DATABASE__POSTGRESQL__USER=${{ secrets.DB_USER }} \
-              -e DATABASE__POSTGRESQL__DB=${{ secrets.DB_NAME }} \
+              -e DATABASE__POSTGRESQL__USERNAME=${{ secrets.DB_USER }} \
+              -e DATABASE__POSTGRESQL__DATABASE=${{ secrets.DB_NAME }} \
               -e DATABASE__REDIS__HOST=${{ secrets.REDIS_HOST }} \
               -e DATABASE__REDIS__PASSWORD=${{ secrets.REDIS_PASSWORD }} \
               -e DATABASE__VECTOR_DB__QDRANT__HOST=${{ secrets.QDRANT_HOST }} \
               -e DATABASE__VECTOR_DB__QDRANT__API_KEY=${{ secrets.QDRANT_API_KEY }} \
-              -e AWS__ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
-              -e AWS__SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
-              -e AWS__DEFAULT_REGION=${{ secrets.AWS_DEFAULT_REGION }} \
               ${{ secrets.DOCKER_USERNAME }}/smart-prompt-parser:latest
