@@ -26,6 +26,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./Backend
+          file: ./Backend/docker/Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/smart-prompt-parser:latest
 
