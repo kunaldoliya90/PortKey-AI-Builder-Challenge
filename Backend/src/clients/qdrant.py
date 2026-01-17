@@ -3,6 +3,7 @@
 import asyncio
 from typing import List, Optional
 
+import httpx
 import requests
 from qdrant_client.models import PointStruct
 from structlog import get_logger
@@ -28,14 +29,31 @@ class AsyncQdrantClientWrapper:
         if not qdrant_config:
             raise ValueError("Qdrant configuration not found")
 
-        # Use IP address directly to avoid DNS resolution issues
+        # Handle different host formats
         host = qdrant_config.host
-        if host == "127.0.0.1" or host == "localhost":
-            host = "127.0.0.1"  # Force IPv4
-        self.base_url = f"http://{host}:{qdrant_config.port}"
+        port = qdrant_config.port
+
+        # Handle full HTTPS URLs (e.g., from cloud providers)
+        if host.startswith("https://"):
+            self.base_url = f"{host}:{port}"
+            self.use_https = True
+        elif host.startswith("http://"):
+            self.base_url = f"{host}:{port}"
+            self.use_https = False
+        else:
+            # Local development - assume HTTP
+            self.base_url = f"http://{host}:{port}"
+            self.use_https = False
         self.api_key = qdrant_config.api_key
-        self.session = requests.Session()
-        self.session.timeout = 30.0
+
+        # Use httpx for HTTPS, requests for HTTP
+        if self.use_https:
+            self.client = httpx.AsyncClient(timeout=30.0)
+            self.use_requests = False
+        else:
+            self.session = requests.Session()
+            self.session.timeout = 30.0
+            self.use_requests = True
 
         logger.info(
             "Async Qdrant HTTP client initialized",
@@ -57,11 +75,17 @@ class AsyncQdrantClientWrapper:
                 if self.api_key:
                     headers["api-key"] = self.api_key
 
-                response = await asyncio.to_thread(
-                    self.session.get,
-                    f"{self.base_url}/collections/{COLLECTION_NAME}",
-                    headers=headers
-                )
+                if self.use_requests:
+                    response = await asyncio.to_thread(
+                        self.session.get,
+                        f"{self.base_url}/collections/{COLLECTION_NAME}",
+                        headers=headers
+                    )
+                else:
+                    response = await self.client.get(
+                        f"{self.base_url}/collections/{COLLECTION_NAME}",
+                        headers=headers
+                    )
                 if response.status_code == 200:
                     logger.info("Collection already exists", collection=COLLECTION_NAME)
                     return True
@@ -87,12 +111,19 @@ class AsyncQdrantClientWrapper:
                 if self.api_key:
                     headers["api-key"] = self.api_key
 
-                response = await asyncio.to_thread(
-                    self.session.put,
-                    f"{self.base_url}/collections/{COLLECTION_NAME}",
-                    json=collection_config,
-                    headers=headers
-                )
+                if self.use_requests:
+                    response = await asyncio.to_thread(
+                        self.session.put,
+                        f"{self.base_url}/collections/{COLLECTION_NAME}",
+                        json=collection_config,
+                        headers=headers
+                    )
+                else:
+                    response = await self.client.put(
+                        f"{self.base_url}/collections/{COLLECTION_NAME}",
+                        json=collection_config,
+                        headers=headers
+                    )
 
                 if response.status_code in [200, 201]:
                     logger.info("Collection created successfully", collection=COLLECTION_NAME)
@@ -177,13 +208,21 @@ class AsyncQdrantClientWrapper:
             if self.api_key:
                 headers["api-key"] = self.api_key
 
-            response = await asyncio.to_thread(
-                self.session.put,
-                f"{self.base_url}/collections/{COLLECTION_NAME}/points",
-                json=request_data,
-                headers=headers,
-                timeout=10.0
-            )
+            if self.use_requests:
+                response = await asyncio.to_thread(
+                    self.session.put,
+                    f"{self.base_url}/collections/{COLLECTION_NAME}/points",
+                    json=request_data,
+                    headers=headers,
+                    timeout=10.0
+                )
+            else:
+                response = await self.client.put(
+                    f"{self.base_url}/collections/{COLLECTION_NAME}/points",
+                    json=request_data,
+                    headers=headers,
+                    timeout=10.0
+                )
 
             if response.status_code in [200, 201]:
                 return True
@@ -228,12 +267,19 @@ class AsyncQdrantClientWrapper:
             if self.api_key:
                 headers["api-key"] = self.api_key
 
-            response = await asyncio.to_thread(
-                self.session.post,
-                f"{self.base_url}/collections/{COLLECTION_NAME}/points/search",
-                json=search_data,
-                headers=headers
-            )
+            if self.use_requests:
+                response = await asyncio.to_thread(
+                    self.session.post,
+                    f"{self.base_url}/collections/{COLLECTION_NAME}/points/search",
+                    json=search_data,
+                    headers=headers
+                )
+            else:
+                response = await self.client.post(
+                    f"{self.base_url}/collections/{COLLECTION_NAME}/points/search",
+                    json=search_data,
+                    headers=headers
+                )
 
             if response.status_code == 200:
                 response_data = response.json()
@@ -275,6 +321,13 @@ class AsyncQdrantClientWrapper:
         except Exception as e:
             logger.error("Error deleting points", error=str(e), count=len(point_ids))
             return False
+
+    async def close(self):
+        """Close the client connection."""
+        if hasattr(self, 'client') and not self.use_requests:
+            await self.client.aclose()
+        elif hasattr(self, 'session') and self.use_requests:
+            await asyncio.to_thread(self.session.close)
 
 
 # Global client instances
