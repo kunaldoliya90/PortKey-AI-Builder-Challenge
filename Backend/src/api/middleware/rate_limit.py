@@ -61,8 +61,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path in ["/health", "/health/ready", "/docs", "/redoc", "/openapi.json", "/"]:
             return await call_next(request)
 
-        # Get identifier (API key or IP address)
-        identifier = getattr(request.state, "api_key", None) or request.client.host
+        # Get identifier (IP address)
+        identifier = request.client.host
         endpoint = request.url.path
 
         # Get rate limit key

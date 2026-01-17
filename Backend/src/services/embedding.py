@@ -1,8 +1,10 @@
 """Embedding generation service using Portkey AI."""
 
+import base64
 import hashlib
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 from structlog import get_logger
 
 from src.clients.portkey import AsyncPortkeyClient, PortkeyClientError, get_async_portkey_client
@@ -169,7 +171,22 @@ class EmbeddingService:
             if not embedding_data:
                 raise PortkeyClientError("No embedding data returned")
 
-            embedding = embedding_data.embedding if hasattr(embedding_data, "embedding") else []
+            raw_embedding = embedding_data.embedding if hasattr(embedding_data, "embedding") else ""
+
+            # Decode base64 string to float array
+            if isinstance(raw_embedding, str):
+                # Base64 encoded embedding
+                try:
+                    decoded_bytes = base64.b64decode(raw_embedding)
+                    embedding = np.frombuffer(decoded_bytes, dtype=np.float32).tolist()
+                except Exception as e:
+                    logger.error("Failed to decode base64 embedding", error=str(e))
+                    raise PortkeyClientError(f"Failed to decode embedding: {e}")
+            elif isinstance(raw_embedding, list):
+                # Already a list of floats
+                embedding = raw_embedding
+            else:
+                raise PortkeyClientError("Unexpected embedding format")
 
             metadata = {
                 "model": selected_model,
