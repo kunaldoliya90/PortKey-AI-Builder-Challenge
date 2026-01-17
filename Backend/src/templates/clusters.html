@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Clusters - Smart Prompt Parser{% endblock %}
+
+{% block content %}
+<h1>Prompt Clusters</h1>
+
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Prompts</th>
+            <th>Confidence</th>
+            <th>Created</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for cluster in clusters %}
+        <tr>
+            <td><code>{{ cluster.id[:8] }}...</code></td>
+            <td>{{ cluster.name or 'N/A' }}</td>
+            <td>{{ cluster.prompt_count or 0 }}</td>
+            <td>{{ "%.2f"|format(cluster.confidence_score) if cluster.confidence_score else 'N/A' }}</td>
+            <td>{{ cluster.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td><a href="/clusters/{{ cluster.id }}">View</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if total > page_size %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="?page={{ page - 1 }}">Previous</a>
+    {% endif %}
+    
+    <span class="active">{{ page }}</span>
+    
+    {% if page * page_size < total %}
+    <a href="?page={{ page + 1 }}">Next</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
