@@ -57,6 +57,7 @@ jobs:
               -e DATABASE__REDIS__PASSWORD=${{ secrets.REDIS_PASSWORD }} \
               -e DATABASE__VECTOR_DB__QDRANT__HOST=${{ secrets.QDRANT_HOST }}:6333 \
               -e DATABASE__VECTOR_DB__QDRANT__API_KEY=${{ secrets.QDRANT_API_KEY }} \
+              -e APP_ENVIRONMENT=production \
               ${{ secrets.DOCKER_USERNAME }}/smart-prompt-parser:latest \
               bash -c "cd migrations && ../venv/bin/alembic upgrade head"
 
@@ -73,4 +74,5 @@ jobs:
               -e DATABASE__REDIS__PASSWORD=${{ secrets.REDIS_PASSWORD }} \
               -e DATABASE__VECTOR_DB__QDRANT__HOST=${{ secrets.QDRANT_HOST }}:6333 \
               -e DATABASE__VECTOR_DB__QDRANT__API_KEY=${{ secrets.QDRANT_API_KEY }} \
+              -e APP_ENVIRONMENT=production \
               ${{ secrets.DOCKER_USERNAME }}/smart-prompt-parser:latest

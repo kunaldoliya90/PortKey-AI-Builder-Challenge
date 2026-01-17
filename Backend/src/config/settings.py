@@ -23,12 +23,19 @@ class ConfigLoader:
 
         Args:
             config_path: Optional path to config.yaml file. If None, looks for
-                        config/config.yaml relative to project root.
+                        config/config.yaml or config/config.production.yaml based on environment.
         """
         if config_path is None:
-            # Look for config.yaml in Backend/config/ directory
+            # Look for config file in Backend/config/ directory
             project_root = Path(__file__).parent.parent.parent
-            config_path = project_root / "config" / "config.yaml"
+            config_dir = project_root / "config"
+
+            # Use production config if APP_ENVIRONMENT=production
+            app_env = os.getenv("APP_ENVIRONMENT", "dev")
+            if app_env == "production":
+                config_path = config_dir / "config.production.yaml"
+            else:
+                config_path = config_dir / "config.yaml"
 
         self.config_path = config_path
         self._settings: Optional[Settings] = None
