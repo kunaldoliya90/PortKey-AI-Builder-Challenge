@@ -48,6 +48,7 @@ venv.bak/
 config/config.yaml
 config/*.yaml
 !config/config.example.yaml
+!config/config.production.yaml
 
 # Database
 *.db

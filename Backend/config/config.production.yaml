@@ -1,0 +1,75 @@
+# Production Configuration Template
+# Copy this to config.yaml and set environment variables for production
+# This file shows the structure but values should come from environment variables
+
+portkey:
+  api_key: "${PORTKEY_API_KEY}"
+  base_url: "https://api.portkey.ai"
+  timeout: 30
+  retry_attempts: 3
+
+models:
+  embedding:
+    primary: "@openai/text-embedding-3-large"  # Upgraded for better accuracy
+    fallback: "@openai/text-embedding-3-large"  # Upgraded for consistency
+    batch_size: 100
+
+  canonicalization:
+    primary: "@openai/gpt-5.2-pro"  # Upgraded to latest GPT for max accuracy
+    alternative: "@anthropic/claude-sonnet-4-5"  # Upgraded to latest Claude
+    max_tokens: 4000  # Increased for better responses
+    temperature: 0.1
+
+  reasoning:
+    model: "@openai/o1-pro"  # Upgraded to O1 Pro for complex reasoning
+    max_tokens: 2000  # Increased for detailed analysis
+
+  moderation:
+    model: "@openai/omni-moderation-latest"  # Already using latest
+
+aws:
+  secrets_manager:
+    enabled: true
+
+  s3:
+    bucket: "${S3_BUCKET_NAME:-portkey-ai-builder}"
+    region: "${AWS_DEFAULT_REGION:-us-east-1}"
+    dataset_urls: "${S3_DATASET_URLS}"  # Comma-separated list of S3 URLs
+
+database:
+  postgresql:
+    host: "${DATABASE_POSTGRESQL_HOST:-localhost}"
+    port: 5432
+    username: "${DATABASE_POSTGRESQL_USERNAME:-postgres}"
+    password: "${DATABASE_POSTGRESQL_PASSWORD}"
+    database: "${DATABASE_POSTGRESQL_DATABASE:-smart_prompt_parser}"
+    ssl_mode: "require"
+
+  redis:
+    host: "${DATABASE_REDIS_HOST:-localhost}"
+    port: 6379
+    password: "${DATABASE_REDIS_PASSWORD}"
+    db: 0
+
+  vector_db:
+    type: "qdrant"
+    qdrant:
+      host: "${DATABASE_QDRANT_HOST:-localhost}"
+      port: 6333
+      api_key: "${DATABASE_QDRANT_API_KEY}"
+
+app:
+  environment: "prod"
+  log_level: "INFO"
+
+clustering:
+  similarity_threshold: 0.75
+
+processing:
+  batch_size: 50
+  max_concurrent: 10
+
+observability:
+  cloudwatch:
+    enabled: true
+    log_group: "/smart-prompt-parser/production"
