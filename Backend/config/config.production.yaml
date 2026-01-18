@@ -3,7 +3,7 @@
 # This file shows the structure but values should come from environment variables
 
 portkey:
-  api_key: "${PORTKEY_API_KEY}"
+  api_key: "${PORTKEY__API_KEY}"
   base_url: "https://api.portkey.ai"
   timeout: 30
   retry_attempts: 3
@@ -38,25 +38,25 @@ aws:
 
 database:
   postgresql:
-    host: "${DATABASE_POSTGRESQL_HOST:-localhost}"
+    host: "${DATABASE__POSTGRESQL__HOST:-localhost}"
     port: 5432
-    username: "${DATABASE_POSTGRESQL_USERNAME:-postgres}"
-    password: "${DATABASE_POSTGRESQL_PASSWORD}"
-    database: "${DATABASE_POSTGRESQL_DATABASE:-smart_prompt_parser}"
+    username: "${DATABASE__POSTGRESQL__USERNAME:-postgres}"
+    password: "${DATABASE__POSTGRESQL__PASSWORD}"
+    database: "${DATABASE__POSTGRESQL__DATABASE:-smart_prompt_parser}"
     ssl_mode: "require"
 
   redis:
-    host: "${DATABASE_REDIS_HOST:-localhost}"
+    host: "${DATABASE__REDIS__HOST:-localhost}"
     port: 6379
-    password: "${DATABASE_REDIS_PASSWORD}"
+    password: "${DATABASE__REDIS__PASSWORD}"
     db: 0
 
   vector_db:
     type: "qdrant"
     qdrant:
-      host: "${DATABASE_QDRANT_HOST:-localhost}"
+      host: "${DATABASE__VECTOR__DB__QDRANT__HOST:-localhost}"
       port: 6333
-      api_key: "${DATABASE_QDRANT_API_KEY}"
+      api_key: "${DATABASE__VECTOR__DB__QDRANT__API_KEY}"
 
 app:
   environment: "prod"

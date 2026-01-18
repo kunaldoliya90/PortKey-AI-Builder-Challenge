@@ -57,6 +57,9 @@ jobs:
               -e DATABASE__REDIS__PASSWORD=${{ secrets.REDIS_PASSWORD }} \
               -e DATABASE__VECTOR_DB__QDRANT__HOST=${{ secrets.QDRANT_HOST }} \
               -e DATABASE__VECTOR_DB__QDRANT__API_KEY=${{ secrets.QDRANT_API_KEY }} \
+              -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
+              -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+              -e AWS_DEFAULT_REGION=${{ secrets.AWS_DEFAULT_REGION }} \
               -e APP_ENVIRONMENT=production \
               ${{ secrets.DOCKER_USERNAME }}/smart-prompt-parser:latest \
               bash -c "cd migrations && ../venv/bin/alembic upgrade head"
@@ -74,6 +77,9 @@ jobs:
               -e DATABASE__REDIS__PASSWORD=${{ secrets.REDIS_PASSWORD }} \
               -e DATABASE__VECTOR_DB__QDRANT__HOST=${{ secrets.QDRANT_HOST }} \
               -e DATABASE__VECTOR_DB__QDRANT__API_KEY=${{ secrets.QDRANT_API_KEY }} \
+              -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
+              -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+              -e AWS_DEFAULT_REGION=${{ secrets.AWS_DEFAULT_REGION }} \
               -e S3_DATASET_URLS=https://portkey-ai-builder.s3.us-east-1.amazonaws.com/prompts_dataset.csv \
               -e APP_ENVIRONMENT=production \
               ${{ secrets.DOCKER_USERNAME }}/smart-prompt-parser:latest
