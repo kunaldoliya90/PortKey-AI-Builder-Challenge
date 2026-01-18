@@ -1,5 +1,6 @@
 name: Deploy to EC2
 
+# Trigger deployment on push to main branch
 on:
   push:
     branches:
